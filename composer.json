@@ -1,0 +1,17 @@
+{
+    "name": "asdfx/phergie-irc-plugin-react-trivia",
+    "description": "A trivia bot for Phergie IRC Bot",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Alex Mills",
+            "email": "alex@asdfx.us"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Asdfx\\Phergie\\Plugin\\Trivia\\": "src"
+        }
+    }
+}
