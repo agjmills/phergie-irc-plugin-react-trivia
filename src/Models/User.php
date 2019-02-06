@@ -2,7 +2,12 @@
 
 namespace Asdfx\Phergie\Plugin\Trivia\Models;
 
-class User {
+use Illuminate\Database\Eloquent\Model;
 
+class User extends Model {
+
+    protected $table = 'users';
+
+    protected $fillable = ['nick', 'points'];
 }
 

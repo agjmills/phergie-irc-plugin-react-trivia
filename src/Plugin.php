@@ -6,7 +6,9 @@ use Asdfx\Phergie\Plugin\Trivia\Models\User;
 use Asdfx\Phergie\Plugin\Trivia\Models\Question;
 use Phergie\Irc\Bot\React\AbstractPlugin;
 use Phergie\Irc\Bot\React\EventQueueInterface as Queue;
+use Phergie\Irc\Event\UserEventInterface;
 use Phergie\Irc\Plugin\React\Command\CommandEvent as Event;
+use Phergie\Irc\Event\UserEvent;
 
 class Plugin extends AbstractPlugin {
 
@@ -24,9 +26,11 @@ class Plugin extends AbstractPlugin {
     private $points;
     private $config;
     private $database;
+    private $mode = 0;
 
     public function __construct(array $configuration = []) {
         $this->config = $configuration;
+        $this->database = new Providers\Database('sqlite', '', 'trivia.db');
     }
 
     public function getSubscribedEvents()
@@ -44,10 +48,11 @@ class Plugin extends AbstractPlugin {
         $this->ask();
     }
 
-    public function onPrivmsg()
+    public function onPrivmsg(UserEvent $event, Queue $queue)
     {
-        $nick = $this->getEvent()->getNick();
-        switch($this->getEvent()->getArgument(1)) {
+        $nick = $event->getNick();
+        $eventParams = $event->getParams();
+        switch($eventParams[0]) {
             case ".start":
                 if ($this->mode == self::MODE_OFF) {
                     $this->start();
@@ -63,8 +68,8 @@ class Plugin extends AbstractPlugin {
                 }
                 break;
             default:
-                if (strtolower($this->getEvent()->getArgument(1)) == strtolower($this->question['answer'])) {
-                    $this->correct($this->getEvent());
+                if (strtolower($event->getParams()[0]) == strtolower($this->question['answer'])) {
+                    $this->correct($event);
                 } else {
                 }
                 break;
@@ -88,19 +93,19 @@ class Plugin extends AbstractPlugin {
             $this->doPrivMsg($this->config['channel'], 'Times up!');
             $this->doneTime = null;
             $this->missed();
-        } else if ($this->mode == self::MODE_WAITING && !is_null($this->nextTime) && $time >= $this->nextTime)
+        } else if ($this->mode == self::MODE_WAITING && !is_null($this->nextTime) && $time >= $this->nextTime) {
             $this->nextTime = null;
             $this->next();
         }
     }
 
-    private function correct(Phergie_Event_Request $eventRequest) {
-        $nick = $eventRequest->getNick();
+    private function correct(UserEventInterface $event) {
+        $nick = $event->getNick();
         $this->doPrivMsg($this->config['channel'], 'Correct! ' . $nick . ' gets ' . $this->points . ' points');
 
-        $user = User::getIdByNick($nick);
+        $user = User::where('nick', $nick)->first();
         if ($user === null) {
-            $user = User::create($nick);
+            $user = User::create(['nick' => $nick, 'points' => 0]);
         }
 
         $user->points = $user->points + $this->points;
@@ -132,7 +137,7 @@ class Plugin extends AbstractPlugin {
 
     private function ask() {
         $this->mode = self::MODE_ASKING;
-        $this->question = Question::fetch();
+        $this->question = Question::inRandomOrder()->first();
         $this->doPrivMsg($this->config['channel'], 'Here comes another question');
         $this->doPrivMsg($this->config['channel'], $this->question['question']);
         
@@ -144,6 +149,11 @@ class Plugin extends AbstractPlugin {
 
         $this->doPrivMsg($this->config['channel']);
         $this->points = 3;
+    }
+
+    private function doPrivMsg(EventQueueInterface $queue, $target, $message)
+    {
+        $queue->ircPrivmsg($target, $message);
     }
 }
 
