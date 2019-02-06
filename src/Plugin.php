@@ -6,8 +6,6 @@ use Asdfx\Phergie\Plugin\Trivia\Models\User;
 use Asdfx\Phergie\Plugin\Trivia\Models\Question;
 use Phergie\Irc\Bot\React\AbstractPlugin;
 use Phergie\Irc\Client\React\LoopAwareInterface;
-use Phergie\Irc\Client\React\WriteStream;
-use Phergie\Irc\Connection;
 use Phergie\Irc\ConnectionInterface;
 use Phergie\Irc\Event\UserEventInterface;
 use Phergie\Irc\Bot\React\EventQueueInterface;
@@ -16,21 +14,64 @@ use React\EventLoop\TimerInterface;
 
 class Plugin extends AbstractPlugin implements LoopAwareInterface
 {
-
     const MODE_OFF = 0;
     const MODE_ON = 1;
     const MODE_ASKING = 2;
     const MODE_WAITING = 3;
+
+    /**
+     * @var ?int
+     */
     private $firstHintTime = null;
+
+    /**
+     * @var ?int
+     */
     private $secondHintTime = null;
+
+    /**
+     * @var ?int
+     */
     private $doneTime = null;
+
+    /**
+     * @var ?int
+     */
     private $nextTime = null;
+
+    /**
+     * @var ?string
+     */
     private $hint = null;
+
+    /**
+     * @var array
+     */
     private $question = [];
+
+    /**
+     * @var int
+     */
     private $points = 3;
+
+    /**
+     * @var array
+     */
     private $config = [];
+
+    /**
+     * @var Providers\Database
+     */
     private $database;
+
+    /**
+     * @var int
+     */
     private $mode = 0;
+
+    /**
+     * @var \SplObjectStorage
+     */
     protected $connections;
 
     public function __construct(array $configuration = [])
@@ -40,25 +81,40 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         $this->question = ['answer' => null, 'question' => null];
     }
 
-    public function getSubscribedEvents()
+    /**
+     * Bind plugin methods to ones emitted by phergie
+     *
+     * @return array
+     */
+    public function getSubscribedEvents(): array
     {
         return [
-            'irc.tick' => 'onTick',
             'irc.received.privmsg' => 'onPrivmsg',
             'connect.after.each' => 'addConnection',
         ];
     }
 
+    /**
+     * Set a timer to execute Plugin::triviaLoop() every 1 second
+     *
+     * @param LoopInterface $loop
+     */
     public function setLoop(LoopInterface $loop)
     {
-        $loop->addPeriodicTimer(2, [$this, 'triviaLoop']);
+        $loop->addPeriodicTimer(1, [$this, 'triviaLoop']);
     }
 
+    /**
+     * @param ConnectionInterface $connection
+     */
     public function addConnection(ConnectionInterface $connection)
     {
         $this->getConnections()->attach($connection);
     }
 
+    /**
+     * @return \SplObjectStorage
+     */
     public function getConnections()
     {
         if (!$this->connections) {
@@ -67,6 +123,11 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         return $this->connections;
     }
 
+    /**
+     * For each connection the bot is connected to, grab the event queue and pass it into the handleTrivia method
+     *
+     * @param TimerInterface $timer
+     */
     public function triviaLoop(TimerInterface $timer)
     {
         $factory = $this->getEventQueueFactory();
@@ -76,40 +137,44 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         }
     }
 
+    /**
+     * If we are waiting for an answer, then determine whether it is time to output a hint, or end the question,
+     * or move on to the next question.
+     *
+     * @param $queue
+     */
     private function handleTrivia($queue)
     {
         $time = time();
 
-        echo 'Tick';
-        echo 'Mode: ' . $this->mode;
-        echo 'First Hint Time: ' . $this->firstHintTime;
-        echo 'Current Time: ' . $time;
-        echo '###########################';
-
         if ($this->mode === self::MODE_WAITING && !is_null($this->firstHintTime) && $time >= $this->firstHintTime) {
-            echo 'First Hint';
             $this->hint = $this->getHint($this->question['answer']);
             $queue->ircPrivmsg($this->config['channel'], $this->hint);
             $this->firstHintTime = null;
             $this->points = ceil($this->points / 2);
         } else if ($this->mode === self::MODE_WAITING && !is_null($this->secondHintTime) && $time >= $this->secondHintTime) {
-            echo 'Second Hint';
             $queue->ircPrivmsg($this->config['channel'], $this->getHint($this->question['answer'], $this->hint));
             $this->secondHintTime = null;
             $this->points = ceil($this->points / 2);
         } else if ($this->mode === self::MODE_WAITING && !is_null($this->doneTime) && $time >= $this->doneTime) {
-            echo 'TIMES UP';
             $queue->ircPrivmsg($this->config['channel'], 'Times up!');
             $this->doneTime = null;
-            $this->missed($event, $queue);
+            $this->missed($queue);
         } else if ($this->mode === self::MODE_WAITING && !is_null($this->nextTime) && $time >= $this->nextTime) {
-            echo 'Next Question';
             $this->nextTime = null;
-            $this->next($event, $queue);
+            $this->next($queue);
         }
     }
 
-    private function getHint($answer, $last = '')
+    /**
+     * Takes a string, and replaces the characters with asterisks to be used as a hint
+     * If a 'last' parameter is provided, then use that as a starting point
+     *
+     * @param $answer
+     * @param string $last
+     * @return string
+     */
+    private function getHint(string $answer, string $last = ''): string
     {
         $parts = str_split($answer);
         $lastParts = str_split($last);
@@ -140,13 +205,25 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         return $response;
     }
 
+    /**
+     * Start trivia by asking a question
+     *
+     * @param UserEventInterface $event
+     * @param EventQueueInterface $queue
+     */
     private function start(UserEventInterface $event, EventQueueInterface $queue)
     {
         $this->mode = self::MODE_ON;
         $queue->ircPrivmsg($this->config['channel'], 'I want to play some trivia, don\'t you?!');
-        $this->ask($event, $queue);
+        $this->ask($queue);
     }
 
+    /**
+     * If a private message comes to the bot, determine what to do if it is a command.
+     *
+     * @param UserEventInterface $event
+     * @param EventQueueInterface $queue
+     */
     public function onPrivmsg(UserEventInterface $event, EventQueueInterface $queue)
     {
         $eventParams = $event->getParams();
@@ -175,11 +252,13 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         }
     }
 
-    public function onTick(WriteStream $stream, Connection $connection)
-    {
-        $stream->emit('trivia');
-    }
-
+    /**
+     * When a correct answer is given, tell the user its correct, increment their points, and move on to the next
+     * question
+     *
+     * @param UserEventInterface $event
+     * @param EventQueueInterface $queue
+     */
     private function correct(UserEventInterface $event, EventQueueInterface $queue)
     {
         $nick = $event->getNick();
@@ -196,14 +275,24 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         $this->next($event, $queue);
     }
 
-    private function missed(UserEventInterface $event, EventQueueInterface $queue)
+    /**
+     * If nobody answers the question, output the answer and move onto the next question in 5 seconds.
+     *
+     * @param EventQueueInterface $queue
+     */
+    private function missed(EventQueueInterface $queue)
     {
         $queue->ircPrivmsg($this->config['channel'], 'Were you sleeping? Sit here and study the correct answer.');
         $queue->ircPrivmsg($this->config['channel'], 'Answer: ' . $this->question['answer']);
         $this->nextTime = time() + 5;
     }
 
-    private function next(UserEventInterface $event, EventQueueInterface $queue)
+    /**
+     * Move on to the next question by resetting all of our timers.
+     *
+     * @param EventQueueInterface $queue
+     */
+    private function next(EventQueueInterface $queue)
     {
         $this->mode = self::MODE_ON;
         $this->firstHintTime = null;
@@ -211,16 +300,27 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         $this->doneTime = null;
         $this->nextTime = null;
         $this->hint = '';
-        $this->ask($event, $queue);
+        $this->ask($queue);
     }
 
+    /**
+     * Disable trivia
+     *
+     * @param UserEventInterface $event
+     * @param EventQueueInterface $queue
+     */
     private function stop(UserEventInterface $event, EventQueueInterface $queue)
     {
         $this->mode = self::MODE_OFF;
         $queue->ircPrivmsg($this->config['channel'], 'Stopping Trivia');
     }
 
-    private function ask(UserEventInterface $event, EventQueueInterface $queue)
+    /**
+     * Grab a random question from the database, and setup out timers.
+     *
+     * @param EventQueueInterface $queue
+     */
+    private function ask(EventQueueInterface $queue)
     {
         $this->mode = self::MODE_ASKING;
         $this->question = Question::inRandomOrder()->first();
@@ -228,7 +328,6 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         $queue->ircPrivmsg($this->config['channel'], $this->question['question']);
 
         $this->mode = self::MODE_WAITING;
-        echo 'WE ARE NOW WAITING';
         $this->firstHintTime = time() + 30;
         $this->secondHintTime = time() + 60;
         $this->doneTime = time() + 90;
