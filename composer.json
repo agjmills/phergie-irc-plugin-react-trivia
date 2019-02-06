@@ -9,7 +9,8 @@
         }
     ],
     "require": {
-        "illuminate/database": "^5.7"
+        "illuminate/database": "^5.7",
+        "phergie/phergie-irc-bot-react": "^2.1"
     },
     "autoload": {
         "psr-4": {
