@@ -5,32 +5,39 @@ namespace Asdfx\Phergie\Plugin\Trivia;
 use Asdfx\Phergie\Plugin\Trivia\Models\User;
 use Asdfx\Phergie\Plugin\Trivia\Models\Question;
 use Phergie\Irc\Bot\React\AbstractPlugin;
+use Phergie\Irc\Client\React\LoopAwareInterface;
+use Phergie\Irc\Client\React\WriteStream;
+use Phergie\Irc\Connection;
+use Phergie\Irc\ConnectionInterface;
 use Phergie\Irc\Event\UserEventInterface;
 use Phergie\Irc\Bot\React\EventQueueInterface;
+use React\EventLoop\LoopInterface;
+use React\EventLoop\TimerInterface;
 
-class Plugin extends AbstractPlugin
+class Plugin extends AbstractPlugin implements LoopAwareInterface
 {
 
     const MODE_OFF = 0;
     const MODE_ON = 1;
     const MODE_ASKING = 2;
     const MODE_WAITING = 3;
-
-    private $firstHintTime;
-    private $secondHintTime;
-    private $doneTime;
-    private $nextTime;
-    private $hint;
-    private $question;
-    private $points;
-    private $config;
+    private $firstHintTime = null;
+    private $secondHintTime = null;
+    private $doneTime = null;
+    private $nextTime = null;
+    private $hint = null;
+    private $question = [];
+    private $points = 3;
+    private $config = [];
     private $database;
     private $mode = 0;
+    protected $connections;
 
     public function __construct(array $configuration = [])
     {
         $this->config = $configuration;
         $this->database = new Providers\Database('sqlite', '', 'trivia.db');
+        $this->question = ['answer' => null, 'question' => null];
     }
 
     public function getSubscribedEvents()
@@ -38,7 +45,99 @@ class Plugin extends AbstractPlugin
         return [
             'irc.tick' => 'onTick',
             'irc.received.privmsg' => 'onPrivmsg',
+            'connect.after.each' => 'addConnection',
         ];
+    }
+
+    public function setLoop(LoopInterface $loop)
+    {
+        $loop->addPeriodicTimer(2, [$this, 'triviaLoop']);
+    }
+
+    public function addConnection(ConnectionInterface $connection)
+    {
+        $this->getConnections()->attach($connection);
+    }
+
+    public function getConnections()
+    {
+        if (!$this->connections) {
+            $this->connections = new \SplObjectStorage;
+        }
+        return $this->connections;
+    }
+
+    public function triviaLoop(TimerInterface $timer)
+    {
+        $factory = $this->getEventQueueFactory();
+        foreach ($this->getConnections() as $connection) {
+            $queue = $factory->getEventQueue($connection);
+            $this->handleTrivia($queue);
+        }
+    }
+
+    private function handleTrivia($queue)
+    {
+        $time = time();
+
+        echo 'Tick';
+        echo 'Mode: ' . $this->mode;
+        echo 'First Hint Time: ' . $this->firstHintTime;
+        echo 'Current Time: ' . $time;
+        echo '###########################';
+
+        if ($this->mode === self::MODE_WAITING && !is_null($this->firstHintTime) && $time >= $this->firstHintTime) {
+            echo 'First Hint';
+            $this->hint = $this->getHint($this->question['answer']);
+            $queue->ircPrivmsg($this->config['channel'], $this->hint);
+            $this->firstHintTime = null;
+            $this->points = ceil($this->points / 2);
+        } else if ($this->mode === self::MODE_WAITING && !is_null($this->secondHintTime) && $time >= $this->secondHintTime) {
+            echo 'Second Hint';
+            $queue->ircPrivmsg($this->config['channel'], $this->getHint($this->question['answer'], $this->hint));
+            $this->secondHintTime = null;
+            $this->points = ceil($this->points / 2);
+        } else if ($this->mode === self::MODE_WAITING && !is_null($this->doneTime) && $time >= $this->doneTime) {
+            echo 'TIMES UP';
+            $queue->ircPrivmsg($this->config['channel'], 'Times up!');
+            $this->doneTime = null;
+            $this->missed($event, $queue);
+        } else if ($this->mode === self::MODE_WAITING && !is_null($this->nextTime) && $time >= $this->nextTime) {
+            echo 'Next Question';
+            $this->nextTime = null;
+            $this->next($event, $queue);
+        }
+    }
+
+    private function getHint($answer, $last = '')
+    {
+        $parts = str_split($answer);
+        $lastParts = str_split($last);
+        $response = "";
+
+        foreach ($parts as $index => $letter) {
+            if ($last == "") {
+                if ($letter == " ") {
+                    $response .= " ";
+                } else if (rand(1, 4) == 2) {
+                    $response .= $letter;
+                } else {
+                    $response .= "*";
+                }
+            } else {
+                if ($lastParts[$index] != "*") {
+                    $response .= $lastParts[$index];
+                } else if ($letter == " ") {
+                    $response .= " ";
+                } else if ($lastParts[$index] == "*" && rand(1, 2) == 2) {
+                    $response .= $letter;
+                } else {
+                    $response .= "*";
+                }
+            }
+        }
+
+        return $response;
     }
 
     private function start(UserEventInterface $event, EventQueueInterface $queue)
@@ -50,9 +149,9 @@ class Plugin extends AbstractPlugin
 
     public function onPrivmsg(UserEventInterface $event, EventQueueInterface $queue)
     {
-        $nick = $event->getNick();
         $eventParams = $event->getParams();
-        switch ($eventParams[0]) {
+        $messageParts = explode(' ', $eventParams['text']);
+        switch ($messageParts[0]) {
             case ".start":
                 if ($this->mode == self::MODE_OFF) {
                     $this->start($event, $queue);
@@ -68,7 +167,7 @@ class Plugin extends AbstractPlugin
                 }
                 break;
             default:
-                if (strtolower($event->getParams()[0]) == strtolower($this->question['answer'])) {
+                if (strtolower($eventParams['text']) === strtolower($this->question['answer'])) {
                     $this->correct($event, $queue);
                 } else {
                 }
@@ -76,27 +175,9 @@ class Plugin extends AbstractPlugin
         }
     }
 
-
-    public function onTick(UserEventInterface $event, EventQueueInterface $queue)
+    public function onTick(WriteStream $stream, Connection $connection)
     {
-        $time = time();
-        if ($this->mode == self::MODE_WAITING && !is_null($this->firstHintTime) && $time >= $this->firstHintTime) {
-            $this->hint = $this->getHint($this->question['answer']);
-            $queue->ircPrivmsg($this->config['channel'], $this->hint);
-            $this->firstHintTime = null;
-            $this->points = ceil($this->points / 2);
-        } else if ($this->mode == self::MODE_WAITING && !is_null($this->secondHintTime) && $time >= $this->secondHintTime) {
-            $queue->ircPrivmsg($this->config['channel'], $this->getHint($this->question['answer'], $this->hint));
-            $this->secondHintTime = null;
-            $this->points = ceil($this->points / 2);
-        } else if ($this->mode == self::MODE_WAITING && !is_null($this->doneTime) && $time >= $this->doneTime) {
-            $queue->ircPrivmsg($this->config['channel'], 'Times up!');
-            $this->doneTime = null;
-            $this->missed($event, $queue);
-        } else if ($this->mode == self::MODE_WAITING && !is_null($this->nextTime) && $time >= $this->nextTime) {
-            $this->nextTime = null;
-            $this->next($event, $queue);
-        }
+        $stream->emit('trivia');
     }
 
     private function correct(UserEventInterface $event, EventQueueInterface $queue)
@@ -106,13 +187,13 @@ class Plugin extends AbstractPlugin
 
         $user = User::where('nick', $nick)->first();
         if ($user === null) {
-            $user = User::create(['nick' => $nick, 'points' => 0]);
+            $user = User::create(['nick' => $nick]);
         }
 
         $user->points = $user->points + $this->points;
 
         $user->save();
-        $this->next();
+        $this->next($event, $queue);
     }
 
     private function missed(UserEventInterface $event, EventQueueInterface $queue)
@@ -147,11 +228,10 @@ class Plugin extends AbstractPlugin
         $queue->ircPrivmsg($this->config['channel'], $this->question['question']);
 
         $this->mode = self::MODE_WAITING;
-
-        $this->firstHintTime = time() + $this->config['time_limit_first_hint'];
-        $this->secondHintTime = time() + $this->config['time_limit_first_hint'] + $this->config['time_limit_second_hint'];
-        $this->doneTime = time() + $this->config['time_limit_first_hint'] + $this->config['time_limit_second_hint'] + $this->config['time_limit_done'];
-
+        echo 'WE ARE NOW WAITING';
+        $this->firstHintTime = time() + 30;
+        $this->secondHintTime = time() + 60;
+        $this->doneTime = time() + 90;
         $this->points = 3;
     }
 }

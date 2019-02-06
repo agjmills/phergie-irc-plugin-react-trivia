@@ -2,7 +2,9 @@
 
 namespace Asdfx\Phergie\Plugin\Trivia\Models;
 
-class Question {
+use Illuminate\Database\Eloquent\Model;
 
+class Question extends Model {
+    protected $table = 'questions';
 }
 
