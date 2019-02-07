@@ -162,7 +162,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
             $this->missed($queue);
         } else if ($this->mode === self::MODE_WAITING && !is_null($this->nextTime) && $time >= $this->nextTime) {
             $this->nextTime = null;
-            $this->next($queue);
+            $this->next(null, $queue);
         }
     }
 
@@ -292,7 +292,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
      *
      * @param EventQueueInterface $queue
      */
-    private function next(EventQueueInterface $queue)
+    private function next(?UserEventInterface $event = null, EventQueueInterface $queue)
     {
         $this->mode = self::MODE_ON;
         $this->firstHintTime = null;
