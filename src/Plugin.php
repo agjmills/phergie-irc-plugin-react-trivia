@@ -2,6 +2,7 @@
 
 namespace Asdfx\Phergie\Plugin\Trivia;
 
+use Asdfx\Phergie\Plugin\Trivia\Models\Message;
 use Asdfx\Phergie\Plugin\Trivia\Models\User;
 use Asdfx\Phergie\Plugin\Trivia\Models\Question;
 use Phergie\Irc\Bot\React\AbstractPlugin;
@@ -214,7 +215,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
     private function start(UserEventInterface $event, EventQueueInterface $queue)
     {
         $this->mode = self::MODE_ON;
-        $queue->ircPrivmsg($this->config['channel'], 'I want to play some trivia, don\'t you?!');
+        $queue->ircPrivmsg($this->config['channel'], Message::getStart());
         $this->ask($queue);
     }
 
@@ -233,16 +234,20 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
                 if ($this->mode == self::MODE_OFF) {
                     $this->start($event, $queue);
                 } else {
-                    $queue->ircPrivmsg($this->config['channel'], 'I\'m sorry Dave, I can\'t do that right now.');
+                    $queue->ircPrivmsg($this->config['channel'], Message::getNoCanDo());
                 }
                 break;
             case '.stop':
                 if ($this->mode != self::MODE_OFF) {
                     $this->stop($event, $queue);
                 } else {
-                    $queue->ircPrivmsg($this->config['channel'], 'I\'m sorry Dave, I can\'t do that right now.');
+                    $queue->ircPrivmsg($this->config['channel'], Message::getNoCanDo());
                 }
                 break;
+            case '.score':
+                $nick = $event->getNick();
+                $points = $this->points($nick);
+                $queue->ircPrivmsg($this->config['channel'], Message::getScore($nick, $points));
             default:
                 if (strtolower($eventParams['text']) === strtolower($this->question['answer'])) {
                     $this->correct($event, $queue);
@@ -262,7 +267,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
     private function correct(UserEventInterface $event, EventQueueInterface $queue)
     {
         $nick = $event->getNick();
-        $queue->ircPrivmsg($this->config['channel'], 'Correct! ' . $nick . ' gets ' . $this->points . ' points');
+        $queue->ircPrivmsg($this->config['channel'], Message::getCorrect($nick, $this->points));
 
         $user = User::where('nick', $nick)->first();
         if ($user === null) {
@@ -282,7 +287,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
      */
     private function missed(EventQueueInterface $queue)
     {
-        $queue->ircPrivmsg($this->config['channel'], 'Were you sleeping? Sit here and study the correct answer.');
+        $queue->ircPrivmsg($this->config['channel'], Message::getWrong());
         $queue->ircPrivmsg($this->config['channel'], 'Answer: ' . $this->question['answer']);
         $this->nextTime = time() + 5;
     }
@@ -312,7 +317,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
     private function stop(UserEventInterface $event, EventQueueInterface $queue)
     {
         $this->mode = self::MODE_OFF;
-        $queue->ircPrivmsg($this->config['channel'], 'Stopping Trivia');
+        $queue->ircPrivmsg($this->config['channel'], Message::getStop());
     }
 
     /**
@@ -324,13 +329,30 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
     {
         $this->mode = self::MODE_ASKING;
         $this->question = Question::inRandomOrder()->first();
-        $queue->ircPrivmsg($this->config['channel'], 'Here comes another question');
+        $queue->ircPrivmsg($this->config['channel'], Message::getAsk());
         $queue->ircPrivmsg($this->config['channel'], $this->question['question']);
 
         $this->mode = self::MODE_WAITING;
         $this->firstHintTime = time() + 30;
         $this->secondHintTime = time() + 60;
         $this->doneTime = time() + 90;
+
+        $queue->ircPrivmsg($this->config['channel'], Message::getTimeLimitAnswer($this->doneTime - time()));
+
         $this->points = 3;
+    }
+
+    /**
+     * @param string $nick
+     * @return int
+     */
+    private function points(string $nick): int {
+        $user = User::where('nick', $nick)->first();
+
+        if ($user === null) {
+            return 0;
+        }
+
+        return $user->points;
     }
 }
