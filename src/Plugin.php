@@ -271,7 +271,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
 
         $user = User::where('nick', $nick)->first();
         if ($user === null) {
-            $user = User::create(['nick' => $nick]);
+            $user = User::create(['nick' => $nick, 'points' => 0]);
         }
 
         $user->points = $user->points + $this->points;
