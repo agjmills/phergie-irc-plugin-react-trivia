@@ -17,7 +17,7 @@ class Message
             "I want to play some trivia, don't you?!",
         );
 
-        return "\x039" . $messages[array_rand($messages)] . "\x15";
+        return "\x039" . $messages[array_rand($messages)] ;
     }
 
     /**
@@ -31,7 +31,7 @@ class Message
             "Ya, ummm, no.  Not gonna happen.",
         );
 
-        return "\x034" . $messages[array_rand($messages)] . "\x15";
+        return "\x034" . $messages[array_rand($messages)] ;
     }
 
     /**
@@ -47,7 +47,7 @@ class Message
             "Well, at least I knew the answer to that",
         );
 
-        return "\x034" . $messages[array_rand($messages)] . "\x15";
+        return "\x034" . $messages[array_rand($messages)] ;
     }
 
     /**
@@ -62,7 +62,7 @@ class Message
             "OK, fine I get you're point, I'm stopping!",
         );
 
-        return "\x034" . $messages[array_rand($messages)] . "\x15";
+        return "\x034" . $messages[array_rand($messages)] ;
     }
 
     /**
@@ -74,7 +74,7 @@ class Message
             "Here Comes Another Question",
         );
 
-        return "\x0311" . $messages[array_rand($messages)] . "\x15";
+        return "\x0311" . $messages[array_rand($messages)] ;
     }
 
     /**
@@ -90,7 +90,7 @@ class Message
             "Took you long enough $n! Here's $p pity points.",
         );
 
-        return "\x033" . $messages[array_rand($messages)] . "\x15";
+        return "\x033" . $messages[array_rand($messages)] ;
     }
 
     /**
@@ -103,7 +103,7 @@ class Message
             "You have $x seconds before you must answer.",
         );
 
-        return "\x0311" . $messages[array_rand($messages)] . "\x15";
+        return "\x0311" . $messages[array_rand($messages)] ;
     }
 
     /**
