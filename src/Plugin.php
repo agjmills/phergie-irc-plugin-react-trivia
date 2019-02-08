@@ -227,6 +227,10 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
      */
     public function onPrivmsg(UserEventInterface $event, EventQueueInterface $queue)
     {
+        if ($event->getSource() !== $this->config['channel']) {
+            return;
+        }
+ 
         $eventParams = $event->getParams();
         $messageParts = explode(' ', $eventParams['text']);
         switch ($messageParts[0]) {
@@ -248,10 +252,10 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
                 $nick = $event->getNick();
                 $points = $this->points($nick);
                 $queue->ircPrivmsg($this->config['channel'], Message::getScore($nick, $points));
+                break;
             default:
                 if (strtolower($eventParams['text']) === strtolower($this->question['answer'])) {
                     $this->correct($event, $queue);
-                } else {
                 }
                 break;
         }
