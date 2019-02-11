@@ -4,6 +4,7 @@ namespace Asdfx\Phergie\Plugin\Trivia;
 
 use Asdfx\Phergie\Plugin\Trivia\Models\Message;
 use Asdfx\Phergie\Plugin\Trivia\Models\User;
+use Asdfx\Phergie\Plugin\Trivia\Models\UsersPoints;
 use Asdfx\Phergie\Plugin\Trivia\Models\Question;
 use Phergie\Irc\Bot\React\AbstractPlugin;
 use Phergie\Irc\Client\React\LoopAwareInterface;
@@ -278,9 +279,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
             $user = User::create(['nick' => $nick, 'points' => 0]);
         }
 
-        $user->points = $user->points + $this->points;
-
-        $user->save();
+        UsersPoints::create(['user_id' => $user->id, 'points' => $this->points]); 
 
         $this->nextTime = time() + 5;
         $this->next($event, $queue);
@@ -359,6 +358,6 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
             return 0;
         }
 
-        return $user->points;
+        return UsersPoints::where('user_id', $user->id)->sum('points');
     }
 }
