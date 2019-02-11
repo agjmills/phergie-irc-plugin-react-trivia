@@ -281,6 +281,8 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         $user->points = $user->points + $this->points;
 
         $user->save();
+
+        $this->nextTime = time() + 5;
         $this->next($event, $queue);
     }
 
