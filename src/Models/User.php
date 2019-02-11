@@ -14,6 +14,6 @@ class User extends Model {
     /**
      * @var array
      */
-    protected $fillable = ['nick', 'points'];
+    protected $fillable = ['nick'];
 }
 
