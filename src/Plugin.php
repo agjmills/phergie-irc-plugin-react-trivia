@@ -255,7 +255,7 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
                 $queue->ircPrivmsg($this->config['channel'], Message::getScore($nick, $points));
                 break;
             default:
-                if (strtolower($eventParams['text']) === strtolower($this->question['answer'])) {
+                if (strtolower($eventParams['text']) === strtolower($this->question['answer']) && $this->mode === self::MODE_WAITING) {
                     $this->correct($event, $queue);
                 }
                 break;
