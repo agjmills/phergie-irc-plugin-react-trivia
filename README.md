@@ -1,9 +1,26 @@
 # Trivia plugin for [Phergie](http://github.com/phergie/phergie-irc-bot-react/)
 
-[Phergie](http://github.com/phergie/phergie-irc-bot-react/) plugin for playing a trivia gam.
+[Phergie](http://github.com/phergie/phergie-irc-bot-react/) plugin for playing a trivia game.
 
 ## About
-This plugin provides a method for performing weather lookups for a specified town/city/zip code from the [Apixu API](https://www.apixu.com/).
+This plugin provides a really simple Trivia game, the bot asks a question, if you answer it correctly, you get points!
+
+## Usage
+
+### Start the game
+`
+.start
+`
+
+### Stop the game
+`
+.stop
+`
+
+### Get your current score
+`
+.score
+`
 
 ## Install
 
