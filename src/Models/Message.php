@@ -59,7 +59,7 @@ class Message
             "Fine give up, see if I care!",
             "What a sore loser.",
             "Oh, I see the only way for you to win is to kill me?",
-            "OK, fine I get you're point, I'm stopping!",
+            "OK, fine I get your point, I'm stopping!",
         );
 
         return "\x034" . $messages[array_rand($messages)] ;
