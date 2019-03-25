@@ -118,4 +118,13 @@ class Message
 
         return $messages[array_rand($messages)];
     }
+
+    public static function getTopTen($users) {
+        $message = 'The top 10 scores are: ';
+        foreach($users as $user) {
+            $message = $user->nick . ': ' . $user->points . ',';
+        }
+
+       return $message;
+    }
 }

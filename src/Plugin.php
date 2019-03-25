@@ -254,6 +254,10 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
                 $points = $this->points($nick);
                 $queue->ircPrivmsg($this->config['channel'], Message::getScore($nick, $points));
                 break;
+            case '.top10':
+                $top10 = $this->getTopTen();
+                $queue->ircPrivmsg($this->config['channel'], Message::getTopTen($top10));
+                break;
             default:
                 if (strtolower($eventParams['text']) === strtolower($this->question['answer']) && $this->mode === self::MODE_WAITING) {
                     $this->correct($event, $queue);
@@ -359,5 +363,12 @@ class Plugin extends AbstractPlugin implements LoopAwareInterface
         }
 
         return UsersPoints::where('user_id', $user->id)->sum('points');
+    }
+
+    private function getTopTen(): array 
+    {
+        return User::all()->map(function($user) {
+            $user->score = $user->points->sum(points);
+        })->sortByDesc('score')->take(10)->toArray();
     }
 }
